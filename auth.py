@@ -1,8 +1,3 @@
-"""
-Step 2: Spotify OAuth, now saving tokens to a file (tokens.json)
-so we don't have to redo the browser login every time.
-"""
-
 import os
 import json
 import base64

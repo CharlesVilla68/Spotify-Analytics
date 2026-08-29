@@ -68,14 +68,23 @@ def get_authorization_code():
     return received_code["code"]
 
 
-def exchange_code_for_tokens(auth_code):
+def _basic_auth_header():
+    """
+    Builds the 'Authorization: Basic ...' header used to prove our
+    app's identity to Spotify. Shared by both the initial code
+    exchange and the refresh-token exchange, since both need it.
+    """
     credentials = f"{CLIENT_ID}:{CLIENT_SECRET}"
     encoded_credentials = base64.b64encode(credentials.encode()).decode()
-
-    headers = {
+    return {
         "Authorization": f"Basic {encoded_credentials}",
         "Content-Type": "application/x-www-form-urlencoded",
     }
+
+
+def exchange_code_for_tokens(auth_code):
+    """First-time login: trade an authorization code for tokens."""
+    headers = _basic_auth_header()
     data = {
         "grant_type": "authorization_code",
         "code": auth_code,
@@ -87,11 +96,23 @@ def exchange_code_for_tokens(auth_code):
     return response.json()
 
 
+def refresh_access_token(refresh_token):
+    """
+    Silent renewal: trade a refresh token for a brand new access
+    token, with no browser involved. This is the new piece.
+    """
+    headers = _basic_auth_header()
+    data = {
+        "grant_type": "refresh_token",
+        "refresh_token": refresh_token,
+    }
+
+    response = requests.post(TOKEN_URL, headers=headers, data=data)
+    response.raise_for_status()
+    return response.json()
+
+
 def save_tokens(token_data):
-    """
-    Writes the tokens to a file, along with the exact moment they'll
-    expire (current time + how many seconds they last).
-    """
     token_data["expires_at"] = time.time() + token_data["expires_in"]
     with open(TOKEN_FILE, "w") as f:
         json.dump(token_data, f, indent=2)
@@ -99,7 +120,6 @@ def save_tokens(token_data):
 
 
 def load_tokens():
-    """Returns saved token data from file, or None if the file doesn't exist yet."""
     if not os.path.exists(TOKEN_FILE):
         return None
     with open(TOKEN_FILE, "r") as f:
@@ -107,15 +127,17 @@ def load_tokens():
 
 
 def is_token_expired(token_data):
-    """True if the current time is past the saved expiry time."""
     return time.time() > token_data["expires_at"]
 
 
 def get_valid_access_token():
     """
-    The main entry point other scripts will use.
-    Loads saved tokens if they exist and are still valid.
-    If missing or expired, runs the full browser login again.
+    Main entry point other scripts use.
+    1. No saved tokens at all -> full browser login (only path that
+       needs a browser).
+    2. Saved token still valid -> use it directly.
+    3. Saved token expired, but we have a refresh token -> silently
+       get a new access token, no browser popup.
     """
     token_data = load_tokens()
 
@@ -123,11 +145,19 @@ def get_valid_access_token():
         print("Using saved access token (still valid).")
         return token_data["access_token"]
 
-    if token_data is not None and is_token_expired(token_data):
-        print("Saved access token has expired. Re-running login...")
-    else:
-        print("No saved tokens found. Running login for the first time...")
+    if token_data is not None and "refresh_token" in token_data:
+        print("Access token expired. Refreshing silently (no browser needed)...")
+        new_token_data = refresh_access_token(token_data["refresh_token"])
 
+        # Spotify doesn't always send back a new refresh_token --
+        # if it doesn't, keep using the one we already have.
+        if "refresh_token" not in new_token_data:
+            new_token_data["refresh_token"] = token_data["refresh_token"]
+
+        save_tokens(new_token_data)
+        return new_token_data["access_token"]
+
+    print("No saved tokens found. Running login for the first time...")
     code = get_authorization_code()
     token_data = exchange_code_for_tokens(code)
     save_tokens(token_data)

@@ -47,6 +47,16 @@ def create_database():
             FOREIGN KEY (track_id) REFERENCES tracks(track_id)
         )
     """)
+    
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS artist_tags (
+            tag_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            artist_id INTEGER NOT NULL,
+            tag_name TEXT NOT NULL,
+            tag_rank INTEGER NOT NULL,
+            FOREIGN KEY (artist_id) REFERENCES artists(artist_id)
+        )
+    """)
 
     conn.commit()
     conn.close()

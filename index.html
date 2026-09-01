@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Spotify Analytics</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            background: #121212;
+            color: white;
+            padding: 40px;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            max-width: 700px;
+        }
+        th, td {
+            text-align: left;
+            padding: 8px 12px;
+            border-bottom: 1px solid #333;
+        }
+        th {
+            color: #1DB954;
+        }
+    </style>
+</head>
+<body>
+    <h1>Top Tracks</h1>
+    <table id="top-tracks-table">
+        <thead>
+            <tr>
+                <th>Track</th>
+                <th>Artist</th>
+                <th>Plays</th>
+            </tr>
+        </thead>
+        <tbody id="top-tracks-body">
+            <!-- rows get filled in by JavaScript below -->
+        </tbody>
+    </table>
+
+    <script>
+        // As soon as the page loads, ask the backend for the data.
+        fetch("http://127.0.0.1:5000/api/top-tracks")
+            .then(response => response.json())  // parse the JSON response
+            .then(tracks => {
+                const tableBody = document.getElementById("top-tracks-body");
+
+                tracks.forEach(track => {
+                    const row = document.createElement("tr");
+                    row.innerHTML = `
+                        <td>${track.track_name}</td>
+                        <td>${track.artist_name}</td>
+                        <td>${track.play_count}</td>
+                    `;
+                    tableBody.appendChild(row);
+                });
+            });
+    </script>
+</body>
+</html>

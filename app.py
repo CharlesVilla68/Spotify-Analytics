@@ -75,6 +75,47 @@ def top_tracks():
 
     return jsonify(results)
 
+@app.route("/api/top-genres")
+def top_genres():
+    """
+    Query parameters, same pattern as /api/top-tracks:
+    - limit: how many genres to return (default 10)
+    - range: one of "30days", "6months", "year", "all" (default "all")
+
+    Example: GET /api/top-genres?limit=15&range=6months
+    """
+    limit = request.args.get("limit", default=10, type=int)
+    time_range = request.args.get("range", default="all")
+
+    modifier = RANGE_MODIFIERS.get(time_range)
+
+    base_select = """
+        SELECT
+            REPLACE(LOWER(artist_tags.tag_name), '-', ' ') AS genre,
+            COUNT(*) AS play_count
+        FROM plays
+        JOIN tracks ON plays.track_id = tracks.track_id
+        JOIN artists ON tracks.artist_id = artists.artist_id
+        JOIN artist_tags ON artists.artist_id = artist_tags.artist_id
+    """
+
+    if modifier is None:
+        sql = base_select + """
+            GROUP BY REPLACE(LOWER(artist_tags.tag_name), '-', ' ')
+            ORDER BY play_count DESC
+            LIMIT ?
+        """
+        results = query_db(sql, (limit,))
+    else:
+        sql = base_select + """
+            WHERE played_at >= date('now', ?)
+            GROUP BY REPLACE(LOWER(artist_tags.tag_name), '-', ' ')
+            ORDER BY play_count DESC
+            LIMIT ?
+        """
+        results = query_db(sql, (modifier, limit))
+
+    return jsonify(results)
 
 if __name__ == "__main__":
     app.run(debug=True, port=5001)

@@ -41,7 +41,7 @@
 
     <script>
         // As soon as the page loads, ask the backend for the data.
-        fetch("http://127.0.0.1:5000/api/top-tracks")
+        fetch("http://127.0.0.1:5001/api/top-tracks")
             .then(response => response.json())  // parse the JSON response
             .then(tracks => {
                 const tableBody = document.getElementById("top-tracks-body");

@@ -9,6 +9,26 @@
             color: white;
             padding: 40px;
         }
+        .tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 24px;
+        }
+        .tab-button {
+            background: #222;
+            color: #aaa;
+            border: 1px solid #444;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .tab-button.active {
+            background: #1DB954;
+            color: black;
+            border-color: #1DB954;
+            font-weight: bold;
+        }
         .controls {
             margin-bottom: 24px;
             display: flex;
@@ -38,7 +58,12 @@
     </style>
 </head>
 <body>
-    <h1>Top Tracks</h1>
+    <h1 id="page-title">Top Tracks</h1>
+
+    <div class="tabs">
+        <button class="tab-button active" id="tab-tracks">Top Tracks</button>
+        <button class="tab-button" id="tab-genres">Top Genres</button>
+    </div>
 
     <div class="controls">
         <label>
@@ -62,52 +87,98 @@
         </label>
     </div>
 
-    <table id="top-tracks-table">
-        <thead>
+    <table id="results-table">
+        <thead id="results-head">
             <tr>
                 <th>Track</th>
                 <th>Artist</th>
                 <th>Plays</th>
             </tr>
         </thead>
-        <tbody id="top-tracks-body">
+        <tbody id="results-body">
         </tbody>
     </table>
 
     <script>
         const limitSelect = document.getElementById("limit-select");
         const rangeSelect = document.getElementById("range-select");
-        const tableBody = document.getElementById("top-tracks-body");
+        const resultsBody = document.getElementById("results-body");
+        const resultsHead = document.getElementById("results-head");
+        const pageTitle = document.getElementById("page-title");
+        const tabTracks = document.getElementById("tab-tracks");
+        const tabGenres = document.getElementById("tab-genres");
 
-        function loadTopTracks() {
+        // Tracks which tab is currently active. Starts on "tracks".
+        let activeView = "tracks";
+
+        function setActiveTab(view) {
+            activeView = view;
+
+            // Toggle the "active" CSS class so the right button is highlighted
+            tabTracks.classList.toggle("active", view === "tracks");
+            tabGenres.classList.toggle("active", view === "genres");
+
+            if (view === "tracks") {
+                pageTitle.textContent = "Top Tracks";
+                resultsHead.innerHTML = `
+                    <tr>
+                        <th>Track</th>
+                        <th>Artist</th>
+                        <th>Plays</th>
+                    </tr>
+                `;
+            } else {
+                pageTitle.textContent = "Top Genres";
+                resultsHead.innerHTML = `
+                    <tr>
+                        <th>Genre</th>
+                        <th>Plays</th>
+                    </tr>
+                `;
+            }
+
+            loadResults();
+        }
+
+        function loadResults() {
             const limit = limitSelect.value;
             const range = rangeSelect.value;
 
-            const url = `http://127.0.0.1:5001/api/top-tracks?limit=${limit}&range=${range}`;
+            const endpoint = activeView === "tracks" ? "top-tracks" : "top-genres";
+            const url = `http://127.0.0.1:5001/api/${endpoint}?limit=${limit}&range=${range}`;
 
             fetch(url)
                 .then(response => response.json())
-                .then(tracks => {
-                    tableBody.innerHTML = "";  // clear previous results first
+                .then(rows => {
+                    resultsBody.innerHTML = "";
 
-                    tracks.forEach(track => {
-                        const row = document.createElement("tr");
-                        row.innerHTML = `
-                            <td>${track.track_name}</td>
-                            <td>${track.artist_name}</td>
-                            <td>${track.play_count}</td>
-                        `;
-                        tableBody.appendChild(row);
+                    rows.forEach(row => {
+                        const tr = document.createElement("tr");
+
+                        if (activeView === "tracks") {
+                            tr.innerHTML = `
+                                <td>${row.track_name}</td>
+                                <td>${row.artist_name}</td>
+                                <td>${row.play_count}</td>
+                            `;
+                        } else {
+                            tr.innerHTML = `
+                                <td>${row.genre}</td>
+                                <td>${row.play_count}</td>
+                            `;
+                        }
+
+                        resultsBody.appendChild(tr);
                     });
                 });
         }
 
-        // Re-run the fetch whenever either dropdown changes
-        limitSelect.addEventListener("change", loadTopTracks);
-        rangeSelect.addEventListener("change", loadTopTracks);
+        tabTracks.addEventListener("click", () => setActiveTab("tracks"));
+        tabGenres.addEventListener("click", () => setActiveTab("genres"));
+        limitSelect.addEventListener("change", loadResults);
+        rangeSelect.addEventListener("change", loadResults);
 
-        // Load once immediately when the page first opens
-        loadTopTracks();
+        loadResults();  // load once immediately on page open
     </script>
 </body>
 </html>

@@ -9,6 +9,19 @@
             color: white;
             padding: 40px;
         }
+        .controls {
+            margin-bottom: 24px;
+            display: flex;
+            gap: 16px;
+            align-items: center;
+        }
+        select {
+            background: #222;
+            color: white;
+            border: 1px solid #444;
+            padding: 6px 10px;
+            border-radius: 4px;
+        }
         table {
             border-collapse: collapse;
             width: 100%;
@@ -26,6 +39,29 @@
 </head>
 <body>
     <h1>Top Tracks</h1>
+
+    <div class="controls">
+        <label>
+            Show:
+            <select id="limit-select">
+                <option value="5">Top 5</option>
+                <option value="10" selected>Top 10</option>
+                <option value="25">Top 25</option>
+                <option value="50">Top 50</option>
+            </select>
+        </label>
+
+        <label>
+            Time range:
+            <select id="range-select">
+                <option value="30days">Last 30 days</option>
+                <option value="6months">Last 6 months</option>
+                <option value="year">Last year</option>
+                <option value="all" selected>All time</option>
+            </select>
+        </label>
+    </div>
+
     <table id="top-tracks-table">
         <thead>
             <tr>
@@ -35,27 +71,43 @@
             </tr>
         </thead>
         <tbody id="top-tracks-body">
-            <!-- rows get filled in by JavaScript below -->
         </tbody>
     </table>
 
     <script>
-        // As soon as the page loads, ask the backend for the data.
-        fetch("http://127.0.0.1:5001/api/top-tracks")
-            .then(response => response.json())  // parse the JSON response
-            .then(tracks => {
-                const tableBody = document.getElementById("top-tracks-body");
+        const limitSelect = document.getElementById("limit-select");
+        const rangeSelect = document.getElementById("range-select");
+        const tableBody = document.getElementById("top-tracks-body");
 
-                tracks.forEach(track => {
-                    const row = document.createElement("tr");
-                    row.innerHTML = `
-                        <td>${track.track_name}</td>
-                        <td>${track.artist_name}</td>
-                        <td>${track.play_count}</td>
-                    `;
-                    tableBody.appendChild(row);
+        function loadTopTracks() {
+            const limit = limitSelect.value;
+            const range = rangeSelect.value;
+
+            const url = `http://127.0.0.1:5001/api/top-tracks?limit=${limit}&range=${range}`;
+
+            fetch(url)
+                .then(response => response.json())
+                .then(tracks => {
+                    tableBody.innerHTML = "";  // clear previous results first
+
+                    tracks.forEach(track => {
+                        const row = document.createElement("tr");
+                        row.innerHTML = `
+                            <td>${track.track_name}</td>
+                            <td>${track.artist_name}</td>
+                            <td>${track.play_count}</td>
+                        `;
+                        tableBody.appendChild(row);
+                    });
                 });
-            });
+        }
+
+        // Re-run the fetch whenever either dropdown changes
+        limitSelect.addEventListener("change", loadTopTracks);
+        rangeSelect.addEventListener("change", loadTopTracks);
+
+        // Load once immediately when the page first opens
+        loadTopTracks();
     </script>
 </body>
 </html>

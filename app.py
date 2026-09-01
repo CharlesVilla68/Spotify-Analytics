@@ -1,22 +1,16 @@
 import sqlite3
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 
 DB_FILE = "spotify.db"
 
 app = Flask(__name__)
-CORS(app)  # allows a webpage running separately to call this backend
+CORS(app)
 
 
 def query_db(sql, params=()):
-    """
-    Runs a SELECT query and returns the results as a list of
-    dictionaries (e.g. [{"track_name": "12:51", "play_count": 490}, ...])
-    instead of plain tuples -- dictionaries are what convert cleanly
-    into the JSON format a webpage expects.
-    """
     conn = sqlite3.connect(DB_FILE)
-    conn.row_factory = sqlite3.Row  # lets us access columns by name
+    conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
     cursor.execute(sql, params)
     rows = cursor.fetchall()
@@ -24,25 +18,61 @@ def query_db(sql, params=()):
     return [dict(row) for row in rows]
 
 
+# Maps a simple preset name to a SQLite date-modifier string.
+# 'all' has no filter at all -- meaning "since the beginning."
+RANGE_MODIFIERS = {
+    "30days": "-30 days",
+    "6months": "-6 months",
+    "year": "-1 year",
+    "all": None,
+}
+
+
 @app.route("/api/top-tracks")
 def top_tracks():
     """
-    Answers: GET http://127.0.0.1:5000/api/top-tracks
-    Returns your top 10 most-played tracks, as JSON.
+    Query parameters (both optional, with defaults):
+    - limit: how many results to return (default 10)
+    - range: one of "30days", "6months", "year", "all" (default "all")
+
+    Example: GET /api/top-tracks?limit=25&range=year
     """
-    sql = """
-        SELECT
-            tracks.name AS track_name,
-            artists.name AS artist_name,
-            COUNT(*) AS play_count
-        FROM plays
-        JOIN tracks ON plays.track_id = tracks.track_id
-        JOIN artists ON tracks.artist_id = artists.artist_id
-        GROUP BY plays.track_id
-        ORDER BY play_count DESC
-        LIMIT 10
-    """
-    results = query_db(sql)
+    limit = request.args.get("limit", default=10, type=int)
+    time_range = request.args.get("range", default="all")
+
+    modifier = RANGE_MODIFIERS.get(time_range)
+
+    if modifier is None:
+        # "all" (or an unrecognized value) -- no date filter at all
+        sql = """
+            SELECT
+                tracks.name AS track_name,
+                artists.name AS artist_name,
+                COUNT(*) AS play_count
+            FROM plays
+            JOIN tracks ON plays.track_id = tracks.track_id
+            JOIN artists ON tracks.artist_id = artists.artist_id
+            GROUP BY plays.track_id
+            ORDER BY play_count DESC
+            LIMIT ?
+        """
+        results = query_db(sql, (limit,))
+    else:
+        sql = """
+            SELECT
+                tracks.name AS track_name,
+                artists.name AS artist_name,
+                COUNT(*) AS play_count
+            FROM plays
+            JOIN tracks ON plays.track_id = tracks.track_id
+            JOIN artists ON tracks.artist_id = artists.artist_id
+            WHERE played_at >= date('now', ?)
+            GROUP BY plays.track_id
+            ORDER BY play_count DESC
+            LIMIT ?
+        """
+        results = query_db(sql, (modifier, limit))
+
     return jsonify(results)
 
 

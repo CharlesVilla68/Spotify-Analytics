@@ -27,23 +27,42 @@ RANGE_MODIFIERS = {
     "all": None,
 }
 
+# Only these three units are accepted -- matches SQLite's own date-modifier
+# vocabulary, and doubles as a safety allowlist (see explanation below).
+VALID_UNITS = {"days", "months", "years"}
+
+
+def build_date_modifier():
+    """
+    Reads 'amount' and 'unit' query parameters and builds a safe
+    SQLite date modifier string, e.g. "-5 months".
+    Returns None if no real filter should be applied (all-time).
+    """
+    amount = request.args.get("amount", type=int)
+    unit = request.args.get("unit", default="days")
+
+    # No amount given at all -- treat as "all time", no filter.
+    if amount is None or amount <= 0:
+        return None
+
+    # Reject anything not in our allowlist -- this is the key safety
+    # check. Since we're about to build a raw SQL modifier string by
+    # combining user input directly (not through a '?' placeholder,
+    # because SQLite doesn't allow parameterizing this particular
+    # spot), we manually restrict 'unit' to only ever be one of three
+    # known-safe words, rather than trusting whatever text arrives.
+    if unit not in VALID_UNITS:
+        unit = "days"
+
+    return f"-{amount} {unit}"
+
 
 @app.route("/api/top-tracks")
 def top_tracks():
-    """
-    Query parameters (both optional, with defaults):
-    - limit: how many results to return (default 10)
-    - range: one of "30days", "6months", "year", "all" (default "all")
-
-    Example: GET /api/top-tracks?limit=25&range=year
-    """
     limit = request.args.get("limit", default=10, type=int)
-    time_range = request.args.get("range", default="all")
-
-    modifier = RANGE_MODIFIERS.get(time_range)
+    modifier = build_date_modifier()
 
     if modifier is None:
-        # "all" (or an unrecognized value) -- no date filter at all
         sql = """
             SELECT
                 tracks.name AS track_name,
@@ -75,19 +94,11 @@ def top_tracks():
 
     return jsonify(results)
 
+
 @app.route("/api/top-genres")
 def top_genres():
-    """
-    Query parameters, same pattern as /api/top-tracks:
-    - limit: how many genres to return (default 10)
-    - range: one of "30days", "6months", "year", "all" (default "all")
-
-    Example: GET /api/top-genres?limit=15&range=6months
-    """
     limit = request.args.get("limit", default=10, type=int)
-    time_range = request.args.get("range", default="all")
-
-    modifier = RANGE_MODIFIERS.get(time_range)
+    modifier = build_date_modifier()
 
     base_select = """
         SELECT
@@ -116,6 +127,3 @@ def top_genres():
         results = query_db(sql, (modifier, limit))
 
     return jsonify(results)
-
-if __name__ == "__main__":
-    app.run(debug=True, port=5001)

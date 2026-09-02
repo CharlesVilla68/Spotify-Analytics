@@ -7,8 +7,16 @@ DB_FILE = "spotify.db"
 app = Flask(__name__)
 CORS(app)
 
+# Only these three units are accepted -- matches SQLite's own date-modifier
+# vocabulary, and doubles as a safety allowlist (see build_date_modifier).
+VALID_UNITS = {"days", "months", "years"}
+
 
 def query_db(sql, params=()):
+    """
+    Runs a SELECT query and returns the results as a list of
+    dictionaries, ready to convert into JSON.
+    """
     conn = sqlite3.connect(DB_FILE)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
@@ -16,20 +24,6 @@ def query_db(sql, params=()):
     rows = cursor.fetchall()
     conn.close()
     return [dict(row) for row in rows]
-
-
-# Maps a simple preset name to a SQLite date-modifier string.
-# 'all' has no filter at all -- meaning "since the beginning."
-RANGE_MODIFIERS = {
-    "30days": "-30 days",
-    "6months": "-6 months",
-    "year": "-1 year",
-    "all": None,
-}
-
-# Only these three units are accepted -- matches SQLite's own date-modifier
-# vocabulary, and doubles as a safety allowlist (see explanation below).
-VALID_UNITS = {"days", "months", "years"}
 
 
 def build_date_modifier():
@@ -41,16 +35,17 @@ def build_date_modifier():
     amount = request.args.get("amount", type=int)
     unit = request.args.get("unit", default="days")
 
-    # No amount given at all -- treat as "all time", no filter.
+    # No amount given at all, or a non-positive number -- treat as
+    # "all time", no filter.
     if amount is None or amount <= 0:
         return None
 
-    # Reject anything not in our allowlist -- this is the key safety
-    # check. Since we're about to build a raw SQL modifier string by
-    # combining user input directly (not through a '?' placeholder,
-    # because SQLite doesn't allow parameterizing this particular
-    # spot), we manually restrict 'unit' to only ever be one of three
-    # known-safe words, rather than trusting whatever text arrives.
+    # Reject anything not in our allowlist. We're about to build a raw
+    # SQL modifier string by combining user input directly (not through
+    # a '?' placeholder, since SQLite doesn't allow parameterizing this
+    # particular spot), so 'unit' must be restricted to only ever be
+    # one of three known-safe words, rather than trusting whatever
+    # text arrives from the request.
     if unit not in VALID_UNITS:
         unit = "days"
 
@@ -59,6 +54,13 @@ def build_date_modifier():
 
 @app.route("/api/top-tracks")
 def top_tracks():
+    """
+    Query parameters:
+    - limit: how many results to return (default 10)
+    - amount + unit: e.g. amount=3&unit=months -- omit both for all-time
+
+    Example: GET /api/top-tracks?limit=25&amount=6&unit=months
+    """
     limit = request.args.get("limit", default=10, type=int)
     modifier = build_date_modifier()
 
@@ -97,6 +99,10 @@ def top_tracks():
 
 @app.route("/api/top-genres")
 def top_genres():
+    """
+    Same query parameters as /api/top-tracks.
+    Example: GET /api/top-genres?limit=15&amount=1&unit=years
+    """
     limit = request.args.get("limit", default=10, type=int)
     modifier = build_date_modifier()
 
@@ -127,3 +133,7 @@ def top_genres():
         results = query_db(sql, (modifier, limit))
 
     return jsonify(results)
+
+
+if __name__ == "__main__":
+    app.run(debug=True, port=5001)
